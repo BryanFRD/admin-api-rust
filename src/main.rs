@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use actix_cors::Cors;
 use actix_web::{web, App, HttpResponse, HttpServer, Responder};
 use bollard::Docker;
 
@@ -17,6 +18,15 @@ async fn main() -> std::io::Result<()> {
     
     HttpServer::new(move || {
         App::new()
+            .wrap(Cors::default()
+                .allow_any_origin()
+                .allow_any_method()
+                .allow_any_header()
+                .max_age(3600)
+                .send_wildcard())
+            .wrap(actix_web::middleware::Logger::default())
+            .wrap(actix_web::middleware::NormalizePath::default())
+            .wrap(actix_web::middleware::Compress::default())
             .app_data(web::Data::new(docker.clone()))
             .route("/containers", web::get().to(list_containers))
     })
