@@ -33,13 +33,13 @@ jobs:
         run: cargo build --release
 
       - name: Deploy to VPS
-        uses: appleboy/scp-action@v0.1.3
+        uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           source: 'target/release/admin-api-rust'
-          target: '/home/deploy/admin-api-rust/target/release/admin-api-rust'
+          target: '/home/deploy/admin-api-rust'
 
       - name: Restart service
         uses: appleboy/ssh-action@v1.2.0
