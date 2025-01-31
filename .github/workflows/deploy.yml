@@ -32,7 +32,7 @@ jobs:
           target: '/home/deploy/admin-api-rust'
 
       - name: Restart service
-        uses: appleboy/ssh-action@v0.1.4
+        uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
