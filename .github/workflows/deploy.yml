@@ -39,7 +39,7 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           source: 'target/release/admin-api-rust'
-          target: '/home/deploy/admin-api-rust'
+          target: '/home/deploy/admin-api-rust/target/release/admin-api-rust'
 
       - name: Restart service
         uses: appleboy/ssh-action@v1.2.0
