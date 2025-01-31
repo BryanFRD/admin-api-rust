@@ -20,7 +20,7 @@ async fn main() -> std::io::Result<()> {
             .app_data(web::Data::new(docker.clone()))
             .route("/containers", web::get().to(list_containers))
     })
-    .bind("127.0.0.1:8001")?
+    .bind("127.0.0.1:8181")?
     .run()
     .await
 }
