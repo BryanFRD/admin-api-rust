@@ -9,6 +9,15 @@ fn get_docker_client() -> Result<Docker, ErrorStatus> {
     .map_err(|_| ErrorStatus::new(StatusCode::INTERNAL_SERVER_ERROR, format!("Error connecting to Docker")))
 }
 
+pub async fn is_alive() -> impl IntoResponse {
+  let docker = get_docker_client();
+  
+  match docker {
+    Ok(_) => (StatusCode::OK, Json(json!({"message": "Docker is alive"}))).into_response(),
+    Err(error) => error.into_response()
+  }
+}
+
 pub async fn get_containers() -> impl IntoResponse {
   let options = Some(bollard::container::ListContainersOptions::<String> {
     all: true,
