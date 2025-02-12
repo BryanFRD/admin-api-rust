@@ -13,8 +13,8 @@ pub async fn is_alive() -> impl IntoResponse {
   let docker = get_docker_client();
   
   match docker {
-    Ok(_) => (StatusCode::OK, Json(json!({"message": "Docker is alive"}))).into_response(),
-    Err(error) => error.into_response()
+    Ok(_) => (StatusCode::OK, Json(json!({"status": 1}))).into_response(),
+    Err(error) => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": error.message, "status": 0}))).into_response()
   }
 }
 
