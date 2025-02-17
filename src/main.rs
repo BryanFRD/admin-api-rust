@@ -1,7 +1,7 @@
 mod routes;
 mod controllers;
 mod errors;
-mod sockets;
+mod quic;
 mod services;
 
 use axum::http::{HeaderValue, Method};
@@ -10,6 +10,8 @@ use tower_http::cors::{AllowOrigin, CorsLayer};
 
 #[tokio::main]
 async fn main() {
+    env_logger::builder().filter_level(log::LevelFilter::Trace).init();
+    
     let cors = CorsLayer::new()
         .allow_methods(vec![Method::GET, Method::POST, Method::PUT, Method::DELETE])
         .allow_origin(AllowOrigin::list([
@@ -18,12 +20,13 @@ async fn main() {
         ]));
     
     let app = setup_routes()
-        .layer(sockets::create_websocket_layer())
         .layer(cors);
     
+    tokio::spawn(async {
+        quic::start_webtransport().await.unwrap();
+    });
+    
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
-    
-    
     
     axum::serve(listener, app).await.unwrap();
 }
