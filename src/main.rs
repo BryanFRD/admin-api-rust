@@ -32,6 +32,13 @@ async fn main() {
         };
     });
     
+    tokio::spawn(async move {
+        match webtransport::start_client().await {
+            Ok(_) => log::info!("WebTransport client stopped"),
+            Err(e) => log::error!("WebTransport client failed: {:?}", e)
+        };
+    });
+    
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
     log::info!("Listening on {}", listener.local_addr().unwrap());
     

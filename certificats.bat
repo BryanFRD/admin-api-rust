@@ -21,7 +21,7 @@ if %ERRORLEVEL% neq 0 (
   exit /b 1
 )
 
-openssl req -new -x509 -key "%PRIVATE_KEY_FILE%" -out "%CERTIFICATE_FILE%" -days 365 -subj "/CN=localhost"
+openssl req -x509 -new -key %PRIVATE_KEY_FILE% -out %CERTIFICATE_FILE% -days 365 -subj "/CN=MyLocalCA"
 if %ERRORLEVEL% neq 0 (
   echo Error generating certificate.
   exit /b 1
