@@ -1,8 +1,10 @@
-use std::error::Error;
-use wtransport::{config::TlsClientConfig, endpoint::IncomingSession, ClientConfig, Endpoint, Identity, ServerConfig};
+use std::{error::Error, sync::Arc};
+use tokio::sync::{broadcast, Mutex};
+use wtransport::{endpoint::IncomingSession, Endpoint, Identity, ServerConfig};
+use crate::services::docker;
 
 pub async fn start_webtransport() -> Result<(), Box<dyn Error>> {
-    let identity = match Identity::load_pemfiles("certs/localhost.crt", "certs/localhost.key").await {
+    let identity = match Identity::load_pemfiles("localhost.pem", "localhost-key.pem").await {
         Ok(identity) => identity,
         Err(e) => {
             log::error!("Failed to load identity: {:?}", e);
@@ -25,19 +27,24 @@ pub async fn start_webtransport() -> Result<(), Box<dyn Error>> {
     
     log::info!("Listening on port 4433");
     
+    let (tx, _rx) = broadcast::channel::<String>(100);
+    
+    tokio::spawn(docker::listen_docker_events(tx.clone()));
+    
     loop {
         let incoming_session = server.accept().await;
         log::info!("Incoming session from {:?}", incoming_session.remote_address());
         
+        let tx_clone = tx.clone();
         tokio::spawn(async move {
-            if let Err(e) = handle_connection(incoming_session).await {
+            if let Err(e) = handle_connection(incoming_session, tx_clone).await {
                 log::error!("Failed to handle connection: {:?}", e);
             }
         });
     }
 }
 
-async fn handle_connection(incoming_session: IncomingSession) -> Result<(), Box<dyn Error>> {
+async fn handle_connection(incoming_session: IncomingSession, tx: broadcast::Sender<String>) -> Result<(), Box<dyn Error>> {
     let request = match incoming_session.await {
         Ok(request) => request,
         Err(e) => {
@@ -56,66 +63,39 @@ async fn handle_connection(incoming_session: IncomingSession) -> Result<(), Box<
     
     log::info!("Accepted connection from {:?}", connection.remote_address());
     
-    while let Ok((mut send_stream, mut recv_stream)) = connection.accept_bi().await {
+    
+    while let Ok((send_stream, mut recv_stream)) = connection.accept_bi().await {
         log::trace!("Accepted bidirectional stream");
         
-        let mut buffer = vec![0; 1024];
-        let bytes_read = match recv_stream.read(&mut buffer).await {
-            Ok(Some(bytes_read)) => bytes_read,
-            Ok(None) => {
-                log::info!("Stream closed");
-                break;
-            }
-            Err(e) => {
-                log::error!("Failed to read from stream: {:?}", e);
-                break;
-            }
-        };
+        let mut rx = tx.subscribe();
+        let send_stream = Arc::new(Mutex::new(send_stream));
         
-        log::info!("Received data! {:?}", &buffer[..bytes_read]);
+        {
+            let send_stream = Arc::clone(&send_stream);
+            tokio::spawn(async move {
+                let mut buffer = vec![0; 1024];
+                
+                while let Ok(Some(bytes_read)) = recv_stream.read(&mut buffer).await {
+                    let received_message = String::from_utf8_lossy(&buffer[..bytes_read]);
+                    log::info!("Received message: {:?}", received_message);
+                    
+                    let mut send_stream = send_stream.lock().await;
+                    let _ = send_stream.write_all(b"Hello from server!").await;
+                    //TODO: Send response
+                }
+            });
+        }
         
-        match send_stream.write_all(&buffer[..bytes_read]).await {
-            Ok(_) => {},
-            Err(e) => {
-                log::error!("Failed to write to stream: {:?}", e);
-                break;
-            }
-        };
-    };
-    
-    Ok(())
-}
-
-pub async fn start_client() -> Result<(), Box<dyn Error>> {
-    let config = ClientConfig::default();
-    
-    let client = match Endpoint::client(config) {
-        Ok(client) => client,
-        Err(e) => {
-            log::error!("Failed to create client: {:?}", e);
-            return Err(Box::new(e));
+        {
+            let send_stream = Arc::clone(&send_stream);
+            tokio::spawn(async move {
+                while let Ok(event) = rx.recv().await {
+                    let mut send_stream = send_stream.lock().await;
+                    let _ = send_stream.write_all(event.as_bytes()).await;
+                }
+            });
         }
-    };
-    
-    let connection = match client.connect("https://localhost:4433").await {
-        Ok(connection) => connection,
-        Err(e) => {
-            log::error!("Failed to connect to server: {:?}", e);
-            return Err(Box::new(e));
-        }
-    };
-    
-    log::info!("Connected to server at {:?}", connection.remote_address());
-    
-    let (mut send_stream, mut recv_stream) = connection.open_bi().await.unwrap().await.unwrap();
-    
-    let message = b"Hello, world!";
-    send_stream.write_all(message).await?;
-    log::info!("Sent message: {:?}", message);
-    
-    let mut buffer = vec![0; 1024];
-    let bytes_read = recv_stream.read(&mut buffer).await.unwrap().unwrap();
-    log::info!("Received data: {:?}", &buffer[..bytes_read]);
+    }
     
     Ok(())
 }

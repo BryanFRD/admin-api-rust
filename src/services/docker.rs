@@ -1,7 +1,42 @@
-use bollard::{errors::Error, secret::{ContainerInspectResponse, ContainerSummary}, Docker};
+use bollard::{errors::Error, secret::{ContainerInspectResponse, ContainerSummary}, system::EventsOptions, Docker};
+use futures::StreamExt;
+use serde_json::json;
+use tokio::sync::broadcast;
 
 pub fn get_docker_client() -> Result<Docker, Error> {
     Docker::connect_with_socket_defaults()
+}
+
+pub async fn listen_docker_events(tx: broadcast::Sender<String>) {
+    let docker = match get_docker_client() {
+        Ok(docker) => docker,
+        Err(error) => {
+            log::error!("Failed to connect to Docker: {:?}", error);
+            return;
+        }
+    };
+    
+    let options = Some(EventsOptions::<String>::default());
+    let mut events = docker.events(options);
+    
+    while let Some(event) = events.next().await {
+        match event {
+            Ok(event) => {
+                let event_str = json!(event).to_string();
+                log::info!("Docker event: [{:?}:{:?}]", event.action, event.typ);
+                
+                match tx.send(event_str){
+                    Ok(_) => {},
+                    Err(error) => {
+                        log::error!("Failed to send Docker event: {:?}", error);
+                    }
+                };
+            }
+            Err(error) => {
+                log::error!("Failed to receive Docker event: {:?}", error);
+            }
+        }
+    }
 }
 
 pub async fn ping() -> i8 {
