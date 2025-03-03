@@ -1,18 +1,24 @@
+use std::{thread::sleep, time::Duration};
+
 use bollard::{errors::Error, secret::{ContainerInspectResponse, ContainerSummary}, system::EventsOptions, Docker};
 use futures::StreamExt;
 use serde_json::json;
 use tokio::sync::broadcast;
+
+const INTERVAL: Duration = Duration::from_secs(10);
 
 pub fn get_docker_client() -> Result<Docker, Error> {
     Docker::connect_with_socket_defaults()
 }
 
 pub async fn listen_docker_events(tx: broadcast::Sender<String>) {
-    let docker = match get_docker_client() {
-        Ok(docker) => docker,
-        Err(error) => {
-            log::error!("Failed to connect to Docker: {:?}", error);
-            return;
+    let docker = loop {
+        match get_docker_client() {
+            Ok(client) => break client,
+            Err(error) => {
+                log::error!("Failed to connect to Docker, retrying in {:?}: {:?}", INTERVAL, error);
+                sleep(INTERVAL);
+            }
         }
     };
     

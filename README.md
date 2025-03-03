@@ -3,5 +3,13 @@
 # Run the project
 
 ```bash
+mkcert -install
+```
+
+```bash
+mkcert localhost
+```
+
+```bash
 cargo run
 ```
