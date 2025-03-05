@@ -1,9 +1,10 @@
 use std::{error::Error, sync::Arc};
+use axum::Json;
 use tokio::sync::{broadcast, Mutex};
-use wtransport::{endpoint::IncomingSession, Endpoint, Identity, ServerConfig};
+use wtransport::{endpoint::IncomingSession, Connection, Endpoint, Identity, ServerConfig};
 use crate::services::docker;
 
-pub async fn start_webtransport() -> Result<(), Box<dyn Error>> {
+pub async fn start_webtransport() -> Result<(), Box<dyn Error + Send + Sync>> {
     let identity = match Identity::load_pemfiles("localhost.pem", "localhost-key.pem").await {
         Ok(identity) => identity,
         Err(e) => {
@@ -44,7 +45,7 @@ pub async fn start_webtransport() -> Result<(), Box<dyn Error>> {
     }
 }
 
-async fn handle_connection(incoming_session: IncomingSession, tx: broadcast::Sender<String>) -> Result<(), Box<dyn Error>> {
+async fn handle_connection(incoming_session: IncomingSession, tx: broadcast::Sender<String>) -> Result<(), Box<dyn Error + Send + Sync>> {
     let request = match incoming_session.await {
         Ok(request) => request,
         Err(e) => {
@@ -63,6 +64,39 @@ async fn handle_connection(incoming_session: IncomingSession, tx: broadcast::Sen
     
     log::info!("Accepted connection from {:?}", connection.remote_address());
     
+    let datagram_handle = tokio::spawn(handle_datagram(connection.clone()));
+    
+    let bidirectional_handle = tokio::spawn(handle_bidirectionnal(connection, tx));
+    
+    let _ = tokio::join!(datagram_handle, bidirectional_handle);
+    Ok(())
+}
+
+async fn handle_datagram(connection: Connection) -> Result<(), Box<dyn Error + Send + Sync>> {
+    loop {
+        let datagram = match connection.receive_datagram().await {
+            Ok(datagram) => datagram,
+            Err(e) => {
+                log::error!("Failed to receive datagram: {:?}", e);
+                return Err(Box::new(e));
+            }
+        };
+        let received_message = String::from_utf8_lossy(&datagram);
+        log::info!("Received message: {:?}", received_message);
+        
+        let response = b"Hello from server via datagram!";
+        match connection.send_datagram(response) {
+            Ok(_) => {},
+            Err(e) => {
+                log::error!("Failed to send datagram: {:?}", e);
+                return Err(Box::new(e));
+            }
+        };
+    }
+}
+
+async fn handle_bidirectionnal(connection: Connection, tx: broadcast::Sender<String>) -> Result<(), Box<dyn Error + Send + Sync>> {
+    log::info!("Accepted connection from {:?}", connection.remote_address());
     
     while let Ok((send_stream, mut recv_stream)) = connection.accept_bi().await {
         log::trace!("Accepted bidirectional stream");
@@ -80,8 +114,8 @@ async fn handle_connection(incoming_session: IncomingSession, tx: broadcast::Sen
                     log::info!("Received message: {:?}", received_message);
                     
                     let mut send_stream = send_stream.lock().await;
+                    
                     let _ = send_stream.write_all(b"Hello from server!").await;
-                    //TODO: Send response
                 }
             });
         }
@@ -98,4 +132,10 @@ async fn handle_connection(incoming_session: IncomingSession, tx: broadcast::Sen
     }
     
     Ok(())
+}
+
+pub fn handle_event(event: String, data: Json<String>) {
+    log::info!("Received event: {:?}", event);
+    log::info!("Received data: {:?}", data);
+    
 }
