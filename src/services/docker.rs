@@ -5,18 +5,25 @@ use futures::StreamExt;
 use serde_json::json;
 use tokio::sync::broadcast;
 
+use crate::{datas::SendEvent, events::{docker::{DockerEvent, DockerStatusData}, Event}};
+
 const INTERVAL: Duration = Duration::from_secs(10);
 
 pub fn get_docker_client() -> Result<Docker, Error> {
     Docker::connect_with_socket_defaults()
 }
 
-pub async fn listen_docker_events(tx: broadcast::Sender<String>) {
+pub async fn listen_docker_events(mut tx: broadcast::Sender<String>) {
     let docker = loop {
         match get_docker_client() {
             Ok(client) => break client,
             Err(error) => {
                 log::error!("Failed to connect to Docker, retrying in {:?}: {:?}", INTERVAL, error);
+                tx.send_event(Event::Docker(DockerEvent::DockerStatus {
+                    data: DockerStatusData {
+                        status: Some(0)
+                    }
+                })).await;
                 sleep(INTERVAL);
             }
         }
@@ -29,7 +36,6 @@ pub async fn listen_docker_events(tx: broadcast::Sender<String>) {
         match event {
             Ok(event) => {
                 let event_str = json!(event).to_string();
-                log::info!("Docker event: [{:?}:{:?}]", event.action, event.typ);
                 
                 match tx.send(event_str){
                     Ok(_) => {},

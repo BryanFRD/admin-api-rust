@@ -1,6 +1,5 @@
 mod events;
 mod datas;
-mod errors;
 mod webtransport;
 mod services;
 

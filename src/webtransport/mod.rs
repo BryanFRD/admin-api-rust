@@ -3,10 +3,10 @@ use std::sync::Arc;
 use tokio::sync::{broadcast, Mutex};
 use wtransport::{endpoint::IncomingSession, Connection, Endpoint, Identity, ServerConfig};
 use crate::services;
-use crate::events::{Event, system::SystemEvent};
+use crate::events::Event;
 
-mod system;
-mod docker;
+pub mod system;
+pub mod docker;
 
 pub async fn start_webtransport() -> Result<(), Box<dyn Error + Send + Sync>> {
     let identity = match Identity::load_pemfiles("localhost.pem", "localhost-key.pem").await {
@@ -30,10 +30,9 @@ pub async fn start_webtransport() -> Result<(), Box<dyn Error + Send + Sync>> {
         }
     };
     
-    log::info!("Listening on port 4433");
-    
     let (tx, _rx) = broadcast::channel::<String>(100);
     
+    //TODO handle errors
     tokio::spawn(services::docker::listen_docker_events(tx.clone()));
     
     loop {

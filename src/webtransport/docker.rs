@@ -1,11 +1,18 @@
-use crate::{datas::{create_event_dto, EventDTO}, events::{docker::DockerEvent, Event}, services::docker};
+use crate::{datas::SendEvent, events::{docker::{DockerContainersRestartData, DockerEvent, DockerStatusData}, Event}, services::docker};
 
 pub async fn handle_message(send_stream: &mut wtransport::SendStream, event: &DockerEvent) {
     match event {
-        DockerEvent::DockerStatus => {
-            if let Err(error) = send_stream.write_all(create_event_dto(Event::Docker(DockerEvent::DockerStatus), docker::ping().await.to_json()).as_bytes()).await {
-                log::error!("Failed to send event: {:?}", error);
-            };
+        DockerEvent::DockerStatus { .. } => {
+            send_stream.send_event(Event::Docker(DockerEvent::DockerStatus {
+                data: DockerStatusData {
+                    status: Some(docker::ping().await)
+                }
+            })).await;
+            log::info!("{:?}", Event::Docker(DockerEvent::DockerContainersRestart {
+                data: DockerContainersRestartData {
+                    container_id: Some("container_id".to_string()),
+                }
+            }));
         },
         DockerEvent::DockerContainersRestart { data } => {
             log::info!("Restarting containers: {:?}", data);
