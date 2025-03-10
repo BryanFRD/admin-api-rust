@@ -3,6 +3,7 @@ use serde_json::{json, Value};
 
 use super::EventDTO;
 
+
 impl EventDTO for ContainerSummary {
   fn to_json(&self) -> Value {
     json!({
@@ -24,6 +25,6 @@ impl EventDTO for ContainerSummary {
 
 impl EventDTO for Vec<ContainerSummary> {
   fn to_json(&self) -> Value {
-    json!(self.iter().map(|f| f.to_json()).collect::<Vec<Value>>())
+    json!(self.iter().map(|container| container.to_json()).collect::<Vec<Value>>())
   }
 }

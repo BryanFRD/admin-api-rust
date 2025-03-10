@@ -150,7 +150,7 @@ async fn handle_bidirectionnal(connection: Connection, tx: broadcast::Sender<Str
         });
         
         tokio::spawn(async move {
-           let mut buffer = [0; 1024];
+           let mut buffer = [0; 4096];
            loop {
             match recv_stream.read(&mut buffer).await {
                 Ok(Some(0)) => {
